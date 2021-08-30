@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 ## reqiures 3.8+
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 import json
+import subprocess as sp
+from configparser import ConfigParser
 import requests
 import logging
 import sys
@@ -12,6 +14,11 @@ import audible
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
+
+def captcha(url):
+	sp.run(['python', '-m', 'webbrowser', url])
+	return input(f'CAPTCHA {url} :')
+
 
 def login():
 	logger.info('logging in')
@@ -27,12 +34,13 @@ def login():
 			getpass(),
 			locale="AU",
 			with_username=False,
-			captcha_callback=lambda url: input(f'CAPTCHA {url} :'),
+			captcha_callback=captcha,
 		)
 		auth.to_file(auth_file)
 		client = audible.Client(auth=auth)
 	return client
 
+# ================================== core =====================================
 	
 def get_owned_series(client):
 	logger.info('retrieving library')
@@ -65,6 +73,15 @@ def get_owned_series(client):
 			series['latest'] = book
 	return owned
 
+def format_release(release):
+	today = datetime.today()
+	if release <= today: return ''
+	diff = release - today
+	days = timedelta(days=diff.days)
+	minor = diff - days
+	if days.days > 0: return f' in {days}'
+	else: return f' in {minor}'
+
 def check_releases(series):
 	logger.info(f"checking {series['title']}")
 	url = series['url']\
@@ -72,30 +89,57 @@ def check_releases(series):
 		.replace('Audiobook/', 'Audiobooks/')
 	page = BeautifulSoup(requests.get(url).content, 'html.parser')
 	releases = page.select('.releaseDateLabel')
+	today = datetime.today()
 	return [
 		node.find_parent('ul')
 			.select('.bc-heading a.bc-link')[0]
 			.get_text()
+		 + format_release(release_date)
 		for node in releases
-		if datetime.strptime(
+		if (release_date := datetime.strptime(
 			re.search(
 				r'\d+-\d+-\d+',
 				node.get_text()
 			).group(0),
 			'%d-%m-%Y',
-		) > series['latest']['release_date']
+		)) > series['latest']['release_date']
 	]
+
+# ======================== config =================================
+'''
+# format
+[ignore_series]
+1 = series title
+2 = series2 title
+...
+'''
+
+def get_config(filename='config.ini'):
+	config = ConfigParser()
+	try:
+		config.read('config.ini')
+		return {
+			'ignore_series': [
+				item for key, item in config.items('ignore_series')
+			],
+		}
+	except:
+		return {}
 	
-	
+
+# ============================= main ==================================
 
 if __name__ == '__main__':
 	logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+
+	config = get_config()
 
 	client = login()
 	owned = get_owned_series(client)
 	new_releases = {
 		series['title']: new_releases
 		for series in owned.values()
-		if (new_releases := check_releases(series))
+		if series['title'] not in config.get('ignore_series', [])
+		and (new_releases := check_releases(series))
 	}
 	pprint(new_releases)
