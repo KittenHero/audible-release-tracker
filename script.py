@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
+
 def captcha(url):
 	sp.run(['python', '-m', 'webbrowser', url])
 	return input(f'CAPTCHA {url} :')
@@ -127,14 +128,10 @@ def get_config(filename='config.ini'):
 		}
 	except:
 		return {}
-	
 
 # ============================= main ==================================
 
-
 async def main():
-	logging.basicConfig(stream=sys.stderr, level=logging.INFO)
-
 	config = get_config()
 
 	client = login()
@@ -148,12 +145,14 @@ async def main():
 			check_releases(http_client, series)
 			for series in owned.values()
 		))
+
 	new_releases = {
 		title: new_books for title, new_books in zip(owned.keys(), new_releases)
 		if new_books
 	}
 	pprint(new_releases)
-	return new_releases
+
 
 if __name__ == '__main__':
-		asyncio.run(main())
+	logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+	asyncio.run(main())
