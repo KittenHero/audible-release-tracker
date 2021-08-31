@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 ## reqiures 3.8+
+import asyncio
 from datetime import datetime, timedelta
 import re
+import httpx
 import json
 import subprocess as sp
 from configparser import ConfigParser
-import requests
 import logging
 import sys
 from pprint import pprint
@@ -82,12 +83,13 @@ def format_release(release):
 	if days.days > 0: return f' in {days}'
 	else: return f' in {minor}'
 
-def check_releases(series):
-	logger.info(f"checking {series['title']}")
+async def check_releases(http_client, series):
 	url = series['url']\
 		.replace('/pd/', 'https://audible.com.au/series/')\
 		.replace('Audiobook/', 'Audiobooks/')
-	page = BeautifulSoup(requests.get(url).content, 'html.parser')
+	response = await http_client.get(url)
+	logger.info(f"checking {series['title']}")
+	page = BeautifulSoup(response.content, 'html.parser')
 	releases = page.select('.releaseDateLabel')
 	today = datetime.today()
 	return [
@@ -129,17 +131,29 @@ def get_config(filename='config.ini'):
 
 # ============================= main ==================================
 
-if __name__ == '__main__':
+
+async def main():
 	logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
 	config = get_config()
 
 	client = login()
-	owned = get_owned_series(client)
+	owned = {
+		title:owned
+		for title,owned in get_owned_series(client).items()
+		if title not in config.get('ignore_series', [])
+	}
+	async with httpx.AsyncClient() as http_client:
+		new_releases = await asyncio.gather(*(
+			check_releases(http_client, series)
+			for series in owned.values()
+		))
 	new_releases = {
-		series['title']: new_releases
-		for series in owned.values()
-		if series['title'] not in config.get('ignore_series', [])
-		and (new_releases := check_releases(series))
+		title: new_books for title, new_books in zip(owned.keys(), new_releases)
+		if new_books
 	}
 	pprint(new_releases)
+	return new_releases
+
+if __name__ == '__main__':
+		asyncio.run(main())
