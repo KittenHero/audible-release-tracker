@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import re
 import httpx
 import json
+from getpass import getpass
 import subprocess as sp
 from configparser import ConfigParser
 import logging
@@ -18,11 +19,19 @@ logger = logging.getLogger(__name__)
 
 
 def captcha(url):
+	'''
+	param: url - captcha url
+	returns: captcha answer
+	'''
 	sp.run(['python', '-m', 'webbrowser', url])
 	return input(f'CAPTCHA {url} :')
 
 
 def login():
+	'''
+	asks user for login credentials
+	returns: audible client (logged in)
+	'''
 	logger.info('logging in')
 	auth_file = '.audible_auth'
 	try:
@@ -30,10 +39,11 @@ def login():
 		client = audible.Client(auth=auth)
 		client.get('library', num_results=1)
 	except (FileNotFoundError, audible.exceptions.AuthFlowError) as e:
-		from getpass import getpass
+		user = input('Username (email): '),
+		passwd = getpass()
 		auth = audible.Authenticator.from_login(
-			input('Username: '),
-			getpass(),
+			user,
+			passwd,
 			locale="AU",
 			with_username=False,
 			captcha_callback=captcha,
@@ -45,6 +55,11 @@ def login():
 # ================================== core =====================================
 	
 def get_owned_series(client):
+	'''
+	param: client - audbile client
+	returns: mapping from title of series in library to series info
+		including the latest owned book
+	'''
 	logger.info('retrieving library')
 	library = client.get(
 		'library',
@@ -76,15 +91,26 @@ def get_owned_series(client):
 	return owned
 
 def format_release(release):
+	'''
+	param: release date (datetime)
+	returns: if book is released: empty string
+			 or time till release rounded down by days
+			 or not rounded if less than 1 day
+	'''
 	today = datetime.today()
 	if release <= today: return ''
 	diff = release - today
-	days = timedelta(days=diff.days)
-	minor = diff - days
-	if days.days > 0: return f' in {days}'
-	else: return f' in {minor}'
+	if diff.days > 0: return f' in {diff.days} days'
+	else: return f' in {diff}'
 
 async def check_releases(http_client, series):
+	'''
+	params:
+		http_client: httpx async client
+		series: a list of book series from audble client
+			containing url, title, and the custom property 'latest'
+	returns: a list of unowned books older than the 'latest' entries in the series
+	'''
 	url = series['url']\
 		.replace('/pd/', 'https://audible.com.au/series/')\
 		.replace('Audiobook/', 'Audiobooks/')
