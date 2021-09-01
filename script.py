@@ -39,7 +39,7 @@ def login():
 		client = audible.Client(auth=auth)
 		client.get('library', num_results=1)
 	except (FileNotFoundError, audible.exceptions.AuthFlowError) as e:
-		user = input('Username (email): '),
+		user = input('Username (email): ')
 		passwd = getpass()
 		auth = audible.Authenticator.from_login(
 			user,
