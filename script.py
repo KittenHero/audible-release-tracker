@@ -48,6 +48,7 @@ def login():
 			with_username=False,
 			captcha_callback=captcha,
 		)
+		auth.register_device()
 		auth.to_file(auth_file)
 		client = audible.Client(auth=auth)
 	return client
