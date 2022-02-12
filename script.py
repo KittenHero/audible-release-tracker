@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 ## reqiures 3.8+
 import asyncio
 from datetime import datetime, timedelta
@@ -10,7 +9,7 @@ import subprocess as sp
 from configparser import ConfigParser
 import logging
 import sys
-from pprint import pprint
+from typing import Dict, List
 
 import audible
 from bs4 import BeautifulSoup
@@ -101,8 +100,8 @@ def format_release(release):
 	today = datetime.today()
 	if release <= today: return ''
 	diff = release - today
-	if diff.days > 0: return f' in {diff.days} days'
-	else: return f' in {diff}'
+	if diff.days > 0: return f': in {diff.days} days'
+	else: return f': in {diff}'
 
 async def check_releases(http_client, series):
 	'''
@@ -134,6 +133,14 @@ async def check_releases(http_client, series):
 			'%d-%m-%Y',
 		)) > series['latest']['release_date']
 	]
+
+def display(releases: Dict[str, List[str]]):
+	for series, books in releases.items():
+		print(f'# {series}')
+		for book in books:
+			print(f'- {book}')
+		print()
+
 
 # ======================== config =================================
 '''
@@ -177,9 +184,9 @@ async def main():
 		title: new_books for title, new_books in zip(owned.keys(), new_releases)
 		if new_books
 	}
-	pprint(new_releases)
+	display(new_releases)
 
 
 if __name__ == '__main__':
-	logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+	logging.basicConfig(stream=sys.stderr, level=logging.ERROR)
 	asyncio.run(main())
