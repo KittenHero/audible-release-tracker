@@ -97,7 +97,8 @@ def format_release(release):
 			 or time till release rounded down by days
 			 or not rounded if less than 1 day
 	'''
-	today = datetime.today()
+	release = release.replace(hour=17)
+	today = datetime.today().replace(microsecond=0)
 	if release <= today: return ''
 	diff = release - today
 	if diff.days > 0: return f': in {diff.days} days'
@@ -114,12 +115,12 @@ async def check_releases(http_client, series):
 	url = series['url']\
 		.replace('/pd/', 'https://audible.com.au/series/')\
 		.replace('Audiobook/', 'Audiobooks/')
-	response = await http_client.get(url)
+	response = await http_client.get(url, timeout=30)
 	logger.info(f"checking {series['title']}")
 	page = BeautifulSoup(response.content, 'html.parser')
 	releases = page.select('.releaseDateLabel')
 	today = datetime.today()
-	return [
+	new_releases = [
 		node.find_parent('ul')
 			.select('.bc-heading a.bc-link')[0]
 			.get_text()
@@ -133,6 +134,8 @@ async def check_releases(http_client, series):
 			'%d-%m-%Y',
 		)) > series['latest']['release_date']
 	]
+	if new_releases:
+		display({series['title']: new_releases})
 
 def display(releases: Dict[str, List[str]]):
 	for series, books in releases.items():
@@ -140,7 +143,6 @@ def display(releases: Dict[str, List[str]]):
 		for book in books:
 			print(f'- {book}')
 		print()
-
 
 # ======================== config =================================
 '''
@@ -179,12 +181,6 @@ async def main():
 			check_releases(http_client, series)
 			for series in owned.values()
 		))
-
-	new_releases = {
-		title: new_books for title, new_books in zip(owned.keys(), new_releases)
-		if new_books
-	}
-	display(new_releases)
 
 
 if __name__ == '__main__':
