@@ -13,6 +13,7 @@ from typing import Dict, List
 
 import audible
 from bs4 import BeautifulSoup
+from tqdm.asyncio import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ def get_owned_series(client):
 			'product_desc',
 			'product_attrs',
 		]),
-		sort_by='Author',
+		sort_by='-PurchaseDate',
 	)
 	has_series = [book for book in library['items'] if book.get('series')]
 	owned = {}
@@ -113,18 +114,18 @@ async def check_releases(http_client, series):
 	returns: a list of unowned books older than the 'latest' entries in the series
 	'''
 	url = series['url']\
-		.replace('/pd/', 'https://audible.com.au/series/')\
+		.replace('/pd/', 'https://www.audible.com.au/series/')\
 		.replace('Audiobook/', 'Audiobooks/')
-	response = await http_client.get(url, timeout=30)
-	logger.info(f"checking {series['title']}")
+	response = await http_client.get(url, timeout=30, )
+	logger.info(f"checking {series['title']} {response.status_code}")
 	page = BeautifulSoup(response.content, 'html.parser')
 	releases = page.select('.releaseDateLabel')
 	today = datetime.today()
-	new_releases = [
+	return series['title'], {
 		node.find_parent('ul')
 			.select('.bc-heading a.bc-link')[0]
-			.get_text()
-		 + format_release(release_date)
+			.get_text():
+			release_date
 		for node in releases
 		if (release_date := datetime.strptime(
 			re.search(
@@ -133,15 +134,17 @@ async def check_releases(http_client, series):
 			).group(0),
 			'%d-%m-%Y',
 		)) > series['latest']['release_date']
-	]
-	if new_releases:
-		display({series['title']: new_releases})
+	}
 
 def display(releases: Dict[str, List[str]]):
-	for series, books in releases.items():
+	sorted_releases = sorted(
+		[(s, r) for s, r in releases.items() if r],
+		key=lambda sr: min(sr[1].values())
+	)
+	for series, books in sorted_releases:
 		print(f'# {series}')
-		for book in books:
-			print(f'- {book}')
+		for book, release_date in books.items():
+			print(f'- {book}' + format_release(release_date))
 		print()
 
 # ======================== config =================================
@@ -177,10 +180,12 @@ async def main():
 		if title not in config.get('ignore_series', [])
 	}
 	async with httpx.AsyncClient() as http_client:
-		new_releases = await asyncio.gather(*(
+		new_releases = await tqdm.gather(*(
 			check_releases(http_client, series)
 			for series in owned.values()
 		))
+	display(dict(new_releases))
+
 
 
 if __name__ == '__main__':
