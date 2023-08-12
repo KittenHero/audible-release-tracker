@@ -8,10 +8,11 @@ import subprocess as sp
 from configparser import ConfigParser
 import logging
 import sys
-from typing import Dict, List
+from typing import Dict, Any
 from contextlib import suppress
 
 import audible
+from audible.exceptions import AuthFlowError
 from bs4 import BeautifulSoup
 from tqdm.asyncio import tqdm
 
@@ -38,7 +39,7 @@ def login():
         auth = audible.Authenticator.from_file(auth_file)
         client = audible.Client(auth=auth)
         client.get('library', num_results=1)
-    except (FileNotFoundError, audible.exceptions.AuthFlowError):
+    except (FileNotFoundError, AuthFlowError):
         user = input('Username (email): ')
         passwd = getpass()
         auth = audible.Authenticator.from_login(
@@ -56,7 +57,7 @@ def login():
 # ================================== core =====================================
 
 
-def get_owned_series(client):
+def get_owned_series(client: audible.Client):
     '''
     param: client - audbile client
     returns: mapping from title of series in library to series info
@@ -93,7 +94,7 @@ def get_owned_series(client):
     return owned
 
 
-def format_release(release):
+def format_release(release: datetime):
     '''
     param: release date (datetime)
     returns: if book is released: empty string
@@ -111,7 +112,7 @@ def format_release(release):
         return f': in {diff}'
 
 
-async def check_releases(http_client, series):
+async def check_releases(http_client: httpx.AsyncClient, series: Dict[str, Any]):
     '''
     params:
             http_client: httpx async client
@@ -142,7 +143,7 @@ async def check_releases(http_client, series):
     }
 
 
-def display(releases: Dict[str, List[str]]):
+def display(releases: Dict[str, Dict[str, datetime]]):
     sorted_releases = sorted(
         [(s, r) for s, r in releases.items() if r],
         key=lambda sr: min(sr[1].values())
@@ -167,10 +168,10 @@ def display(releases: Dict[str, List[str]]):
 def get_config(filename='config.ini'):
     config = ConfigParser()
     with suppress():
-        config.read('config.ini')
+        config.read(filename)
         return {
             'ignore_series': [
-                item for key, item in config.items('ignore_series')
+                item for _, item in config.items('ignore_series')
             ],
         }
     return {}
