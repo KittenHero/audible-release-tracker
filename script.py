@@ -121,9 +121,9 @@ async def check_releases(http_client: httpx.AsyncClient, series: Dict[str, Any])
     returns: a list of unowned books older than 'latest' in series
     '''
     url = series['url']\
-        .replace('/series/', 'https://www.audible.com.au/series/')
-
-    response = await http_client.get(url, timeout=30)
+        .replace('/pd/', 'https://www.audible.com.au/series/')\
+        .replace('Audiobook/', 'Audiobooks/')
+    response = await http_client.get(url, timeout=30, )
     logger.info(f"checking {series['title']} {response.status_code}")
     page = BeautifulSoup(response.content, 'html.parser')
     releases = page.select('.releaseDateLabel')
